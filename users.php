@@ -4,9 +4,17 @@ header("Content-Type: application/json");
 header("Access-Control-Allow-Methods: POST, GET");
 header("Access-Control-Allow-Headers: *");
 include_once 'dbConnect.php';
+error_reporting(E_ALL & ~E_NOTICE);
+
+require_once('PHPMailer/PHPMailerAutoload.php');
+
 
 $userId = "";
+$email = "";
 $isActive = "";
+$newPassword = "";
+$fullName = "";
+$action = "";
 $data = json_decode(file_get_contents('php://input'));
 $userObject = new Users();
     
@@ -16,6 +24,35 @@ if (isset($data->isActive)) {
 
 if (isset($data->userId)) {
     $userId = $data->userId;
+}
+
+if (isset($data->email)) {
+    $email = $data->email;
+}
+
+if (isset($data->newPassword)) {
+    $newPassword = $data->newPassword;
+}
+
+if (isset($data->fullName)) {
+    $fullName = $data->fullName;
+}
+
+if (isset($data->action)) {
+    $action = $data->action;
+}
+
+if (!empty($email) && !empty($action)) {
+    if ($action == "isUserExist") {
+        $json_array = $userObject->getUserByEmail($email);
+    }
+    if ($action == "sendMail") {
+        $json_array = $userObject->sendMail($email, $fullName);
+    }
+    if ($action == "changePassword") {
+        # code...
+    }
+    echo json_encode($json_array);
 }
 
 if (!empty($userId) && empty($isActive)) {
@@ -40,6 +77,44 @@ class Users{
         $this->db = new DbConnect();
     }
     
+    public function sendMail($email, $fullName) {
+        $code = rand(pow(10, 4), pow(10, 5)-1);
+        $subJect = "Password reset verification code";
+        $mail = new PHPMailer();
+        try {
+            //Server settings                     // Enable verbose debug output
+            $mail->isSMTP();                                            // Send using SMTP
+            $mail->Host = 'smtp.gmail.com';                    // Set the SMTP server to send through
+            $mail->SMTPAuth = true;                                   // Enable SMTP authentication
+            $mail->Username = 'mathnyirongo@gmail.com';                     // SMTP username
+            $mail->Password = 'airtellive';                               // SMTP password
+            $mail->SMTPSecure = 'ssl';
+            $mail->Port = 465;                                    // TCP port to connect to, use 465 for `PHPMailer::ENCRYPTION_SMTPS` above
+        
+            //Recipients
+            $mail->setFrom('no-reply@encryptionservices.com');
+            $mail->addAddress($email, $fullName);     // Add a recipient
+            //$mail->addAddress('ellen@example.com');               // Name is optional
+        
+            // Content
+            $mail->isHTML(false);                                  // Set email format to HTML
+            $mail->Subject = 'Password reset verification code';
+           // $mail->Body    = 'This is the HTML message body <b>in bold!</b>';
+           // $mail->AltBody = 'This is the body in plain text for non-HTML mail clients';
+            $mail->Body = "Hi $fullName,\n\nYou have requested to reset your password. Use $code to verify. Ignore this email if you did not make this request.\n\n\nBest,\nThe Encryption Team.";
+        
+            $mail->send();
+            $json["success"] = 1;
+            $json["message"] = "Email sent successfully.";
+            $json["code"] = $code;
+            return $json;
+        } catch (Exception $e) {
+            // echo "Message could not be sent. Mailer Error: {$mail->ErrorInfo}";
+            $json["success"] = 0;
+            $json["message"] = "Failed to send email: {$mail->ErrorInfo}";
+            return $json;
+        }
+    }
     public function changeAccountStatus($status, $userId){
         $sql = "UPDATE users SET isActive = '$status' WHERE id = '$userId'";
         if (mysqli_query($this->db->getDatabase(), $sql)) {
@@ -51,6 +126,26 @@ class Users{
         }
         return $json;
     }
+
+    public function getUserByEmail($email) {
+        $sql = "SELECT * FROM users WHERE email = '$email'";
+        $result = mysqli_query($this->db->getDatabase(), $sql);
+        if (mysqli_num_rows($result) > 0) {
+            while ($row = $result->fetch_assoc()) {
+                $json["success"] = 1;
+                $json["message"] = "Successfully retrieved user";
+                $json["data"]["fullName"] = $row["full_name"];
+                $json["data"]["phoneNumber"] = $row["phone_number"];
+                $json["data"]["email"] = $row["email"];
+                $json["data"]["isActive"] = $row["isActive"];
+            }
+        }else {
+            $json["success"] = 0;
+            $json["message"] = "User not found";
+        }
+        return $json;
+    }
+
     public function getUserById($userId) {
         $sql = "SELECT * FROM users WHERE id = '$userId'";
         $result = mysqli_query($this->db->getDatabase(), $sql);
@@ -77,8 +172,9 @@ class Users{
                 $json["id"] = $row["id"];
                 $json["isActive"] = $row["isActive"];
             }
+            return $json;
         }
-        return $json;
+        return null;
     }
     
     public function isEmailExist($email){

@@ -55,7 +55,7 @@
     
     // Login
     
-    if(!empty($email) && !empty($password)){
+    if(!empty($email) && !empty($password) && empty($fullName)){
         $hashed_password = md5($password);
         $json_array = $userObject->loginUser($email, $password);
         echo json_encode($json_array);
